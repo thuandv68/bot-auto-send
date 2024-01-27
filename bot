@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+const { program } = require("commander");
+const { ethers, Wallet, Contract } = require("ethers");
+
+const CF = require("./config");
+const chalk = require("chalk");
+
+const provider = new ethers.JsonRpcProvider(CF.RPC.URL, { name: CF.RPC.NAME, chainId: CF.RPC.CHAIN_ID });
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+const ABI = [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "balanceOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "name": "transferFrom",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ];
+const log = console.log;
+
+
+const fnApp = {
+    signer: {},
+    account: null,
+    contract: {},
+}
+
+program.command("run").description("Auto transfer token")
+.action(async function() {
+    log(chalk.yellow(this.description()))
+    let IS_RUN = true;
+    while (IS_RUN) {
+        try {
+            const balance = await fnApp.contract.balanceOf(fnApp.account)
+            if (balance.gt(0)) {
+                log("TRANSFER: ", ethers.formatEther(balance))
+                await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
+                await sleep(5 * 1000);
+                IS_RUN = false;
+            }
+        } catch (error) {
+            
+        } finally {
+            await sleep(CF.DELAY * 1000);
+        }
+    }
+})
+
+program.commands.forEach((cmd) => { 
+    cmd
+    .hook('preAction', async function() {
+        log(chalk.green("\tRUNNING................"))
+        fnApp.signer = new Wallet(CF.PRIVATE_KEY, provider);
+        fnApp.account = await fnApp.signer.getAddress();
+        fnApp.contract = new Contract(CF.TOKEN, ABI, fnApp.signer);
+    }) 
+})
+
+program.parse(process.argv);

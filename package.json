@@ -1,0 +1,14 @@
+{
+  "name": "bot-auto-send",
+  "version": "0.01",
+  "main": "app",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "4.1.2",
+    "commander": "11.1.0",
+    "ethers": "6.9.1"
+  },
+  "bin": {
+    "auto-send": "./bot"
+  }
+}
