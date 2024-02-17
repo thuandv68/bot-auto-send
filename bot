@@ -74,12 +74,27 @@ program.command("run").description("Auto transfer token")
     let IS_RUN = true;
     while (IS_RUN) {
         try {
-            const balance = await fnApp.contract.balanceOf(fnApp.account)
+            let balance = await fnApp.contract.balanceOf(fnApp.account)
             log(balance);
             if (balance > 0) {
                 log("TRANSFER: ", ethers.formatUnits(balance, 6))
-                const tx = await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
-                await tx.wait()
+                let tx;
+                try {
+                    tx = await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
+                    await tx.wait()
+                } catch (err) {
+                    log(err)
+                }
+
+                try {
+                    balance = await fnApp.contract.balanceOf(fnApp.account)
+                    if (balance > 0) {
+                        tx = await fnApp.contract.transfer(CF.ADDR_TO, balance)
+                        await tx.wait()
+                    }
+                } catch (err) {
+                    log(err)
+                }
                 IS_RUN = false;
             }
         } catch (error) {
