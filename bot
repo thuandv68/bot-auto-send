@@ -74,7 +74,7 @@ program
 					} catch (err) {
 						log(err);
 					}
-					IS_RUN = false;
+					// IS_RUN = false;
 				}
 			} catch (error) {
 				log(chalk.red(error));
