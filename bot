@@ -1,121 +1,128 @@
 #!/usr/bin/env node
 const { program } = require("commander");
 const { ethers, Wallet, Contract } = require("ethers");
+const { prompt } = require("inquirer");
+const CryptoJS = require("crypto-js");
+const fs = require("fs");
 
 const CF = require("./config");
 const chalk = require("chalk");
 
-const provider = new ethers.JsonRpcProvider(CF.RPC.URL, { name: CF.RPC.NAME, chainId: CF.RPC.CHAIN_ID });
+const provider = new ethers.JsonRpcProvider(CF.RPC.URL, {
+	name: CF.RPC.NAME,
+	chainId: CF.RPC.CHAIN_ID,
+});
 function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 const ABI = [
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "account",
-          "type": "address"
-        }
-      ],
-      "name": "balanceOf",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "name": "transferFrom",
-      "outputs": [
-        {
-          "internalType": "bool",
-          "name": "",
-          "type": "bool"
-        }
-      ],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    }
-  ];
+	{
+		inputs: [
+			{
+				internalType: "address",
+				name: "account",
+				type: "address",
+			},
+		],
+		name: "balanceOf",
+		outputs: [
+			{
+				internalType: "uint256",
+				name: "",
+				type: "uint256",
+			},
+		],
+		stateMutability: "view",
+		type: "function",
+	},
+	{
+		inputs: [
+			{ internalType: "address", name: "to", type: "address" },
+			{ internalType: "uint256", name: "value", type: "uint256" },
+		],
+		name: "transfer",
+		outputs: [{ internalType: "bool", name: "", type: "bool" }],
+		stateMutability: "nonpayable",
+		type: "function",
+	},
+];
+const FILE_KEY = "key.store";
 const log = console.log;
 
-
 const fnApp = {
-    signer: {},
-    account: null,
-    contract: {},
-}
+	signer: {},
+	account: null,
+	contract: {},
+};
 
-program.command("run").description("Auto transfer token")
-.action(async function() {
-    log(chalk.yellow(this.description()))
-    let IS_RUN = true;
-    while (IS_RUN) {
-        try {
-            let balance = await fnApp.contract.balanceOf(fnApp.account)
-            log(balance);
-            if (balance > 0) {
-                log("TRANSFER: ", ethers.formatUnits(balance, 6))
-                let tx;
-                try {
-                    tx = await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
-                    await tx.wait()
-                } catch (err) {
-                    log(err)
-                }
+program
+	.command("run")
+	.description("Auto transfer token")
+	.action(async function () {
+		log(chalk.yellow(this.description()));
+		let IS_RUN = true;
+		while (IS_RUN) {
+			try {
+				let balance = await fnApp.contract.balanceOf(fnApp.account);
+				log(balance);
+				if (balance > 0) {
+					log("TRANSFER: ", ethers.formatUnits(balance, 6));
+					let tx;
+					try {
+						tx = await fnApp.contract.transfer(CF.ADDR_TO, balance);
+						await tx.wait();
+					} catch (err) {
+						log(err);
+					}
+					IS_RUN = false;
+				}
+			} catch (error) {
+				log(chalk.red(error));
+			} finally {
+				await sleep(CF.DELAY * 1000);
+			}
+		}
+		if (!IS_RUN) process.exit();
+	});
 
-                try {
-                    balance = await fnApp.contract.balanceOf(fnApp.account)
-                    if (balance > 0) {
-                        tx = await fnApp.contract.transfer(CF.ADDR_TO, balance)
-                        await tx.wait()
-                    }
-                } catch (err) {
-                    log(err)
-                }
-                IS_RUN = false;
+program.commands.forEach((cmd) => {
+	cmd.hook("preAction", async function () {
+		log(chalk.green("\tRUNNING................"));
+
+		if (!fs.existsSync(FILE_KEY)) {
+			fs.writeFileSync(FILE_KEY, "");
+		}
+		const { password } = await prompt([
+			{
+				name: "password",
+				type: "password",
+				message: "Enter Password: ",
+				mask: "*",
+			},
+		]);
+
+		let PRIVATE_KEY = fs.readFileSync(FILE_KEY).toString();
+		if (PRIVATE_KEY) {
+            PRIVATE_KEY = CryptoJS.AES.decrypt(PRIVATE_KEY, password).toString(CryptoJS.enc.Utf8)
+		} else {
+            const { privateKey } = await prompt([
+				{
+					name: "privateKey",
+					type: "password",
+					message: "Enter Private key: ",
+					mask: "*",
+				},
+			]);
+            if (privateKey) {
+                PRIVATE_KEY = privateKey;
+                fs.writeFileSync(FILE_KEY, CryptoJS.AES.encrypt(privateKey, password).toString())
             }
-        } catch (error) {
-            log(chalk.red(error));
-        } finally {
-            await sleep(CF.DELAY * 1000);
         }
-    }
-    if (!IS_RUN) process.exit();
-})
 
-program.commands.forEach((cmd) => { 
-    cmd
-    .hook('preAction', async function() {
-        log(chalk.green("\tRUNNING................"))
-        fnApp.signer = new Wallet(CF.PRIVATE_KEY, provider);
-        fnApp.account = await fnApp.signer.getAddress();
-        fnApp.contract = new Contract(CF.TOKEN, ABI, fnApp.signer);
-        // fnApp.account = '0xE8A09F24Df64cE8714778A8c54F0259bB041236d'
-        // fnApp.contract = new Contract(CF.TOKEN, ABI, provider)
-    }) 
-})
+		fnApp.signer = new Wallet(PRIVATE_KEY, provider);
+		fnApp.account = await fnApp.signer.getAddress();
+		fnApp.contract = new Contract(CF.TOKEN, ABI, fnApp.signer);
+	});
+});
 
 program.parse(process.argv);
