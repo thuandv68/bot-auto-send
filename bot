@@ -75,18 +75,20 @@ program.command("run").description("Auto transfer token")
     while (IS_RUN) {
         try {
             const balance = await fnApp.contract.balanceOf(fnApp.account)
-            if (balance.gt(0)) {
-                log("TRANSFER: ", ethers.formatEther(balance))
-                await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
-                await sleep(5 * 1000);
+            log(balance);
+            if (balance > 0) {
+                log("TRANSFER: ", ethers.formatUnits(balance, 6))
+                const tx = await fnApp.contract.transferFrom(fnApp.account, CF.ADDR_TO, balance)
+                await tx.wait()
                 IS_RUN = false;
             }
         } catch (error) {
-            
+            log(chalk.red(error));
         } finally {
             await sleep(CF.DELAY * 1000);
         }
     }
+    if (!IS_RUN) process.exit();
 })
 
 program.commands.forEach((cmd) => { 
@@ -96,6 +98,8 @@ program.commands.forEach((cmd) => {
         fnApp.signer = new Wallet(CF.PRIVATE_KEY, provider);
         fnApp.account = await fnApp.signer.getAddress();
         fnApp.contract = new Contract(CF.TOKEN, ABI, fnApp.signer);
+        // fnApp.account = '0xE8A09F24Df64cE8714778A8c54F0259bB041236d'
+        // fnApp.contract = new Contract(CF.TOKEN, ABI, provider)
     }) 
 })
 
